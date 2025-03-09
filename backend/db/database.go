@@ -46,7 +46,6 @@ func (db *Database) InsertChunk(x, y int, chunk world.Chunk) error {
 		return fmt.Errorf("failed to insert chunk: %w", err)
 	}
 
-	log.Printf("Chunk at (%d, %d) inserted successfully.", x, y)
 	return nil
 }
 

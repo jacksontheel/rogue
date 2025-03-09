@@ -63,5 +63,4 @@ func GenerateWorld(db Database, radius int) {
 			}
 		}
 	}
-	fmt.Println("done")
 }

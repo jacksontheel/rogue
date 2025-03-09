@@ -13,15 +13,42 @@ const App = () => {
   let [worldPos, setWorldPos] = useState<number[]>([0, 0]);
   let [viewOffset, setViewOffset] = useState<number[]>([0, 0]);
   let [characterPos, setCharacterPos] = useState<number[]>([5, 5]);
-  let [zoom, setZoom] = useState(2)
+  let [zoom, setZoom] = useState(1);
+  const [ws, setWs] = useState<WebSocket | undefined>(undefined);
+
+  const BASE_URL = "http://localhost:8080/api";
+  const CHUNK_URL = `${BASE_URL}/chunk`;
+  const WS_URL = `${BASE_URL}/ws`;
 
   const WIDTH = 48;
   const HEIGHT = 36;
   const TILESIZE = 16;
 
   useEffect(() => {
-    loadWorld(worldPos[0], worldPos[1]);
+    const socket = new WebSocket(`${WS_URL}?userId=user`);
+
+    socket.onopen = () => {
+      console.log("Connected to WebSocket server");
+      setWs(socket)
+    };
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log("Received message:", data);
+    };
+
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    socket.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
   }, []);
+
+  useEffect(() => {
+    loadWorld(worldPos[0], worldPos[1]);
+  }, [ws])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -31,7 +58,8 @@ const App = () => {
             setCharacterPosWithView(characterPos[0], world.length - 1);
             loadWorld(worldPos[0], worldPos[1] - 1);
           } else if (
-            true || worldAt(characterPos[0], characterPos[1] - 1) === "STONE_FLOOR"
+            true ||
+            worldAt(characterPos[0], characterPos[1] - 1) === "STONE_FLOOR"
           ) {
             setCharacterPosWithView(characterPos[0], characterPos[1] - 1);
           }
@@ -41,7 +69,8 @@ const App = () => {
             setCharacterPosWithView(world[0].length - 1, characterPos[1]);
             loadWorld(worldPos[0] - 1, worldPos[1]);
           } else if (
-            true || worldAt(characterPos[0] - 1, characterPos[1]) === "STONE_FLOOR"
+            true ||
+            worldAt(characterPos[0] - 1, characterPos[1]) === "STONE_FLOOR"
           ) {
             setCharacterPosWithView(characterPos[0] - 1, characterPos[1]);
           }
@@ -51,7 +80,8 @@ const App = () => {
             setCharacterPosWithView(characterPos[0], 0);
             loadWorld(worldPos[0], worldPos[1] + 1);
           } else if (
-            true || worldAt(characterPos[0], characterPos[1] + 1) === "STONE_FLOOR"
+            true ||
+            worldAt(characterPos[0], characterPos[1] + 1) === "STONE_FLOOR"
           ) {
             setCharacterPosWithView(characterPos[0], characterPos[1] + 1);
           }
@@ -61,16 +91,19 @@ const App = () => {
             setCharacterPosWithView(0, characterPos[1]);
             loadWorld(worldPos[0] + 1, worldPos[1]);
           } else if (
-            true || worldAt(characterPos[0] + 1, characterPos[1]) === "STONE_FLOOR"
+            true ||
+            worldAt(characterPos[0] + 1, characterPos[1]) === "STONE_FLOOR"
           ) {
             setCharacterPosWithView(characterPos[0] + 1, characterPos[1]);
           }
           break;
+        case "f":
+          break;
         case "z":
           if (zoom === 1) {
-            setZoom(2)
+            setZoom(2);
           } else {
-            setZoom(1)
+            setZoom(1);
           }
           break;
       }
@@ -84,8 +117,14 @@ const App = () => {
   }, [characterPos, world, zoom]);
 
   const loadWorld = (x: number, y: number) => {
+    if (ws == null) {
+      return
+    }
+
+    ws.send(JSON.stringify({ type: "subscribe", topic: `${x},${y}` }));
+
     axios
-      .get("http://localhost:8080/api/chunk", {
+      .get(CHUNK_URL, {
         params: {
           x,
           y,
@@ -107,9 +146,14 @@ const App = () => {
   const setCharacterPosWithView = (x: number, y: number) => {
     setCharacterPos([x, y]);
 
-    let viewX = Math.min(Math.max(x - (WIDTH / zoom / 2), 0), WIDTH - (WIDTH / zoom));
-    console.log(x - (WIDTH / zoom / 2))
-    let viewY = Math.min(Math.max(y - (HEIGHT / zoom / 2), 0), HEIGHT - (HEIGHT / zoom));
+    let viewX = Math.min(
+      Math.max(x - WIDTH / zoom / 2, 0),
+      WIDTH - WIDTH / zoom,
+    );
+    let viewY = Math.min(
+      Math.max(y - HEIGHT / zoom / 2, 0),
+      HEIGHT - HEIGHT / zoom,
+    );
 
     setViewOffset([viewX, viewY]);
   };
@@ -154,8 +198,14 @@ const App = () => {
             )}
             <Sprite
               image={character}
-              x={characterPos[0] * TILESIZE * zoom - viewOffset[0] * TILESIZE * zoom}
-              y={characterPos[1] * TILESIZE * zoom - viewOffset[1] * TILESIZE * zoom}
+              x={
+                characterPos[0] * TILESIZE * zoom -
+                viewOffset[0] * TILESIZE * zoom
+              }
+              y={
+                characterPos[1] * TILESIZE * zoom -
+                viewOffset[1] * TILESIZE * zoom
+              }
               width={TILESIZE * zoom}
               height={TILESIZE * zoom}
             />
