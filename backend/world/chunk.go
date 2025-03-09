@@ -1,14 +1,13 @@
 package world
 
 import (
-	"fmt"
 	"math/rand/v2"
 
 	"example.com/rogue/util"
 )
 
 type Chunk struct {
-	Rows [][]Material `json:"rows"`
+	World [][]string `json:"world"`
 }
 
 type room struct {
@@ -23,12 +22,12 @@ const ROOM_SIZE = 12
 const ROWS = 36
 const COLS = 48
 
-func GenerateChunk(leftHallways []int, upHallways []int) Chunk {
+func GenerateChunk(northHallways, eastHallways, southHallways, westHallways []int) Chunk {
 	chunk := Chunk{
-		Rows: make([][]Material, ROWS),
+		World: make([][]string, ROWS),
 	}
-	for i := range chunk.Rows {
-		chunk.Rows[i] = make([]Material, COLS)
+	for i := range chunk.World {
+		chunk.World[i] = make([]string, COLS)
 	}
 
 	rooms := make([][]room, ROWS/ROOM_SIZE)
@@ -47,7 +46,7 @@ func GenerateChunk(leftHallways []int, upHallways []int) Chunk {
 
 			for y := rowN + rowOffset; y <= rowN+rowOffset+roomHeight; y++ {
 				for x := colN + colOffset; x <= colN+colOffset+roomWidth; x++ {
-					chunk.Rows[y][x] = MaterialStoneFloor
+					chunk.World[y][x] = MaterialStoneFloor
 				}
 			}
 
@@ -61,16 +60,15 @@ func GenerateChunk(leftHallways []int, upHallways []int) Chunk {
 
 	}
 
-	addHallwaysToChunk(&chunk, rooms)
-	addLeftCorridorToChunk(&chunk, rooms, leftHallways)
-	addRightCorridorToChunk(&chunk, rooms, leftHallways)
-	addUpCorridorToChunk(&chunk, rooms, upHallways)
-	addDownCorridorToChunk(&chunk, rooms, upHallways)
+	chunk.addHallways(rooms)
+	chunk.addNorthCorridorToChunk(rooms, northHallways)
+	chunk.addEastCorridorToChunk(rooms, eastHallways)
+	chunk.addSouthCorridorToChunk(rooms, southHallways)
+	chunk.addWestCorridorToChunk(rooms, westHallways)
 	return chunk
 }
 
-func addHallwaysToChunk(chunk *Chunk, rooms [][]room) {
-
+func (c *Chunk) addHallways(rooms [][]room) {
 	connectPercentage := float32(util.RandRange(5, 11)) / 10
 
 	for rowN := 0; rowN < ROWS/ROOM_SIZE; rowN += 1 {
@@ -94,7 +92,7 @@ func addHallwaysToChunk(chunk *Chunk, rooms [][]room) {
 
 					for y := rowOffset; y < rowOffset+hallwayHeight; y++ {
 						for x := colOffset; x < colOffset+hallwayWidth; x++ {
-							chunk.Rows[y][x] = MaterialStoneFloor
+							c.World[y][x] = MaterialStoneFloor
 						}
 					}
 				}
@@ -117,7 +115,7 @@ func addHallwaysToChunk(chunk *Chunk, rooms [][]room) {
 
 					for y := rowOffset; y < rowOffset+hallwayHeight; y++ {
 						for x := colOffset; x < colOffset+hallwayWidth; x++ {
-							chunk.Rows[y][x] = MaterialStoneFloor
+							c.World[y][x] = MaterialStoneFloor
 						}
 					}
 				}
@@ -126,91 +124,78 @@ func addHallwaysToChunk(chunk *Chunk, rooms [][]room) {
 	}
 }
 
-func addLeftCorridorToChunk(chunk *Chunk, rooms [][]room, requiredYs []int) {
+func (c *Chunk) addWestCorridorToChunk(rooms [][]room, requiredYs []int) {
 	for _, y := range requiredYs {
 		roomRow := y / ROOM_SIZE
 		room := rooms[roomRow][0]
 
 		for x := 0; x <= room.colOffset; x++ {
-			chunk.Rows[y][x] = MaterialStoneFloor
+			c.World[y][x] = MaterialStoneFloor
 		}
 
 		for j := y - 1; j >= roomRow*ROOM_SIZE+room.rowOffset+room.height; j-- {
-			chunk.Rows[j][room.colOffset] = MaterialStoneFloor
+			c.World[j][room.colOffset] = MaterialStoneFloor
 		}
 
 		for j := y + 1; j <= roomRow*ROOM_SIZE+room.rowOffset; j++ {
-			chunk.Rows[j][room.colOffset] = MaterialStoneFloor
+			c.World[j][room.colOffset] = MaterialStoneFloor
 		}
 	}
 }
 
-func addRightCorridorToChunk(chunk *Chunk, rooms [][]room, requiredYs []int) {
+func (c *Chunk) addEastCorridorToChunk(rooms [][]room, requiredYs []int) {
 	for _, y := range requiredYs {
 		roomRow := y / ROOM_SIZE
 		room := rooms[roomRow][3]
 
 		for x := COLS - 1; x >= COLS-(ROOM_SIZE-room.colOffset)+room.width; x-- {
-			chunk.Rows[y][x] = MaterialStoneFloor
+			c.World[y][x] = MaterialStoneFloor
 		}
 
 		for j := y - 1; j >= roomRow*ROOM_SIZE+room.rowOffset+room.height; j-- {
-			chunk.Rows[j][ROOM_SIZE*3+room.colOffset+room.width] = MaterialStoneFloor
+			c.World[j][ROOM_SIZE*3+room.colOffset+room.width] = MaterialStoneFloor
 		}
 
 		for j := y + 1; j <= roomRow*ROOM_SIZE+room.rowOffset; j++ {
-			chunk.Rows[j][ROOM_SIZE*3+room.colOffset+room.width] = MaterialStoneFloor
+			c.World[j][ROOM_SIZE*3+room.colOffset+room.width] = MaterialStoneFloor
 		}
 	}
 }
 
-func addUpCorridorToChunk(chunk *Chunk, rooms [][]room, requiredXs []int) {
+func (c *Chunk) addNorthCorridorToChunk(rooms [][]room, requiredXs []int) {
 	for _, x := range requiredXs {
 		roomCol := x / ROOM_SIZE
 		room := rooms[0][roomCol]
 
 		for y := 0; y <= room.rowOffset; y++ {
-			chunk.Rows[y][x] = MaterialStoneFloor
+			c.World[y][x] = MaterialStoneFloor
 		}
 
 		for i := x - 1; i >= roomCol*ROOM_SIZE+room.colOffset+room.width; i-- {
-			chunk.Rows[room.rowOffset][i] = MaterialStoneFloor
+			c.World[room.rowOffset][i] = MaterialStoneFloor
 		}
 
 		for i := x + 1; i <= roomCol*ROOM_SIZE+room.colOffset; i++ {
-			chunk.Rows[room.rowOffset][i] = MaterialStoneFloor
+			c.World[room.rowOffset][i] = MaterialStoneFloor
 		}
 	}
 }
 
-func addDownCorridorToChunk(chunk *Chunk, rooms [][]room, requiredXs []int) {
+func (c *Chunk) addSouthCorridorToChunk(rooms [][]room, requiredXs []int) {
 	for _, x := range requiredXs {
 		roomCol := x / ROOM_SIZE
 		room := rooms[2][roomCol]
 
 		for y := ROWS - 1; y >= ROWS-(ROOM_SIZE-room.rowOffset)+room.height; y-- {
-			chunk.Rows[y][x] = MaterialStoneFloor
+			c.World[y][x] = MaterialStoneFloor
 		}
 
 		for i := x - 1; i >= roomCol*ROOM_SIZE+room.colOffset+room.width; i-- {
-			chunk.Rows[ROOM_SIZE*2+room.rowOffset+room.height][i] = MaterialStoneFloor
+			c.World[ROOM_SIZE*2+room.rowOffset+room.height][i] = MaterialStoneFloor
 		}
 
 		for i := x + 1; i <= roomCol*ROOM_SIZE+room.colOffset; i++ {
-			chunk.Rows[ROOM_SIZE*2+room.rowOffset+room.height][i] = MaterialStoneFloor
+			c.World[ROOM_SIZE*2+room.rowOffset+room.height][i] = MaterialStoneFloor
 		}
-	}
-}
-
-func (c Chunk) Print() {
-	for _, row := range c.Rows {
-		for _, cell := range row {
-			if cell == MaterialStoneFloor {
-				fmt.Print("X ")
-			} else {
-				fmt.Print(". ")
-			}
-		}
-		fmt.Println()
 	}
 }

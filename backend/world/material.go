@@ -1,8 +1,8 @@
 package world
 
-type Material string
+// type Material string
 
 const (
-	MaterialStone      Material = "STONE"
-	MaterialStoneFloor Material = "STONE_FLOOR"
+	MaterialStone      string = "STONE"
+	MaterialStoneFloor string = "STONE_FLOOR"
 )
