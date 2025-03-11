@@ -8,6 +8,7 @@ import (
 
 	"example.com/rogue/db"
 	"example.com/rogue/pubsub"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -16,12 +17,6 @@ var upgrader = websocket.Upgrader{
 }
 
 func handleWebSocket(ps *pubsub.PubSub, w http.ResponseWriter, r *http.Request) {
-	userId := r.URL.Query().Get("userId")
-	if userId == "" {
-		http.Error(w, "Missing userId query parameter", http.StatusBadRequest)
-		return
-	}
-
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("WebSocket Upgrade Error:", err)
@@ -29,36 +24,61 @@ func handleWebSocket(ps *pubsub.PubSub, w http.ResponseWriter, r *http.Request) 
 	}
 	defer conn.Close()
 
-	var topic string
+	user := pubsub.User{
+		UserId:     uuid.New().String(),
+		Connection: conn,
+	}
+
+	userIDMsg := pubsub.UserIdMessage{
+		Type:   "userId",
+		UserId: user.UserId,
+	}
+	if err := conn.WriteJSON(userIDMsg); err != nil {
+		log.Println("Error sending user ID:", err)
+		conn.Close()
+		return
+	}
 
 	for {
-		var msg pubsub.Message
-		err := conn.ReadJSON(&msg)
+		_, messageBytes, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("WebSocket Read Error:", err)
-			if topic != "" {
-				ps.Unsubscribe(topic, conn)
-			}
+			ps.PublishPlayerExit(user)
 			break
 		}
 
-		switch msg.Type {
-		case "subscribe":
-			if msg.Topic == "" {
-				log.Println("Subscription request missing topic")
-				continue
-			}
-			topic = msg.Topic
-			ps.Subscribe(topic, conn)
-			log.Printf("Client subscribed to topic: %s", topic)
-		case "publish":
-			if msg.Topic == "" || msg.Message == "" {
-				log.Println("Publish request missing topic or message")
-				continue
-			}
-			ps.Publish(msg.Topic, msg.Message)
-			log.Printf("Published message to topic: %s, Message: %s", msg.Topic, msg.Message)
+		handleMessage(ps, user, messageBytes)
+	}
+}
+
+func handleMessage(ps *pubsub.PubSub, user pubsub.User, rawMsg []byte) {
+	var baseMsg pubsub.BaseMessage
+	err := json.Unmarshal(rawMsg, &baseMsg)
+	if err != nil {
+		log.Println("Error unmarshaling base message:", err)
+		return
+	}
+
+	switch baseMsg.Type {
+	case "subscribe":
+		var msg pubsub.SubscribeMessage
+		err := json.Unmarshal(baseMsg.Data, &msg)
+		if err != nil {
+			log.Println("Error unmarshaling subscribe message:", err)
+			return
 		}
+		ps.PublishPlayerExit(user)
+		ps.Subscribe(msg.Topic, user)
+	case "position":
+		var msg pubsub.PositionMessage
+		err := json.Unmarshal(baseMsg.Data, &msg)
+		if err != nil {
+			log.Println("Error unmarshaling position message:", err)
+			return
+		}
+		ps.PublishPosition(user, msg)
+	default:
+		log.Println("Unknown message type:", baseMsg.Type)
 	}
 }
 

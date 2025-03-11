@@ -3,18 +3,24 @@ import "./App.css";
 import brick from "./assets/brick.png";
 import background from "./assets/background.jpg";
 import character from "./assets/character.png";
+import character2 from "./assets/character2.png";
 import "xp.css/dist/XP.css";
 
 import { Stage, Sprite } from "@pixi/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { incomingMessage } from "./models/message";
 
 const App = () => {
-  let [world, setWorld] = useState<String[][]>([]);
-  let [worldPos, setWorldPos] = useState<number[]>([0, 0]);
-  let [viewOffset, setViewOffset] = useState<number[]>([0, 0]);
-  let [characterPos, setCharacterPos] = useState<number[]>([5, 5]);
-  let [zoom, setZoom] = useState(1);
+  const [world, setWorld] = useState<string[][]>([]);
+  const [worldPos, setWorldPos] = useState<number[]>([0, 0]);
+  const [viewOffset, setViewOffset] = useState<number[]>([0, 0]);
+  const [characterPos, setCharacterPos] = useState<number[]>([5, 5]);
+  const [zoom, setZoom] = useState(2);
+  const [userId, setUserId] = useState("")
+  const [userToPosition, setUserToPosition] = useState<Map<string, number[]>>(new Map()) 
   const [ws, setWs] = useState<WebSocket | undefined>(undefined);
+
+  const userIdRef = useRef(userId);
 
   const BASE_URL = "http://localhost:8080/api";
   const CHUNK_URL = `${BASE_URL}/chunk`;
@@ -25,16 +31,38 @@ const App = () => {
   const TILESIZE = 16;
 
   useEffect(() => {
-    const socket = new WebSocket(`${WS_URL}?userId=user`);
+    const socket = new WebSocket(WS_URL);
 
     socket.onopen = () => {
       console.log("Connected to WebSocket server");
-      setWs(socket)
+      setWs(socket);
     };
 
     socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log("Received message:", data);
+      const message = JSON.parse(event.data) as incomingMessage;
+      switch (message.type) {
+        case "userId":
+          setUserId(message.userId)
+          break;
+        case "position":
+          if (message.userId === userIdRef.current) {
+            setCharacterPosWithView(message.data.x, message.data.y);
+          } else {
+            setUserToPosition((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(message.userId, [message.data.x, message.data.y]);
+              return newMap;
+            });
+          }
+          break;
+        case "playerExit":
+          setUserToPosition((prev) => {
+            const newMap = new Map(prev);
+            newMap.delete(message.userId)
+            return newMap
+          });
+          break;
+      }
     };
 
     socket.onerror = (error) => {
@@ -48,56 +76,50 @@ const App = () => {
 
   useEffect(() => {
     loadWorld(worldPos[0], worldPos[1]);
-  }, [ws])
+  }, [ws]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       switch (event.key) {
         case "w":
           if (characterPos[1] == 0) {
-            setCharacterPosWithView(characterPos[0], world.length - 1);
             loadWorld(worldPos[0], worldPos[1] - 1);
+            sendPositionMessage(characterPos[0], world.length - 1);
           } else if (
-            true ||
             worldAt(characterPos[0], characterPos[1] - 1) === "STONE_FLOOR"
           ) {
-            setCharacterPosWithView(characterPos[0], characterPos[1] - 1);
+            sendPositionMessage(characterPos[0], characterPos[1] - 1);
           }
           break;
         case "a":
           if (characterPos[0] == 0) {
-            setCharacterPosWithView(world[0].length - 1, characterPos[1]);
             loadWorld(worldPos[0] - 1, worldPos[1]);
+            sendPositionMessage(world[0].length - 1, characterPos[1]);
           } else if (
-            true ||
             worldAt(characterPos[0] - 1, characterPos[1]) === "STONE_FLOOR"
           ) {
-            setCharacterPosWithView(characterPos[0] - 1, characterPos[1]);
+            sendPositionMessage(characterPos[0] - 1, characterPos[1]);
           }
           break;
         case "s":
           if (characterPos[1] == world.length - 1) {
-            setCharacterPosWithView(characterPos[0], 0);
             loadWorld(worldPos[0], worldPos[1] + 1);
+            sendPositionMessage(characterPos[0], 0);
           } else if (
-            true ||
             worldAt(characterPos[0], characterPos[1] + 1) === "STONE_FLOOR"
           ) {
-            setCharacterPosWithView(characterPos[0], characterPos[1] + 1);
+            sendPositionMessage(characterPos[0], characterPos[1] + 1);
           }
           break;
         case "d":
           if (characterPos[0] == world[0].length - 1) {
-            setCharacterPosWithView(0, characterPos[1]);
             loadWorld(worldPos[0] + 1, worldPos[1]);
+            sendPositionMessage(0, characterPos[1]);
           } else if (
-            true ||
             worldAt(characterPos[0] + 1, characterPos[1]) === "STONE_FLOOR"
           ) {
-            setCharacterPosWithView(characterPos[0] + 1, characterPos[1]);
+            sendPositionMessage(characterPos[0] + 1, characterPos[1]);
           }
-          break;
-        case "f":
           break;
         case "z":
           if (zoom === 1) {
@@ -116,12 +138,25 @@ const App = () => {
     };
   }, [characterPos, world, zoom]);
 
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
+
   const loadWorld = (x: number, y: number) => {
     if (ws == null) {
-      return
+      return;
     }
 
-    ws.send(JSON.stringify({ type: "subscribe", topic: `${x},${y}` }));
+    ws.send(
+      JSON.stringify({
+        type: "subscribe",
+        data: {
+          topic: `${x},${y}`,
+        },
+      }),
+    );
+
+    setUserToPosition(new Map())
 
     axios
       .get(CHUNK_URL, {
@@ -144,6 +179,7 @@ const App = () => {
   };
 
   const setCharacterPosWithView = (x: number, y: number) => {
+    // TODO: Fix this crap up
     setCharacterPos([x, y]);
 
     let viewX = Math.min(
@@ -156,6 +192,18 @@ const App = () => {
     );
 
     setViewOffset([viewX, viewY]);
+  };
+
+  const sendPositionMessage = (x: number, y: number) => {
+    ws?.send(
+      JSON.stringify({
+        type: "position",
+        data: {
+          x,
+          y,
+        },
+      }),
+    );
   };
 
   return (
@@ -209,6 +257,21 @@ const App = () => {
               width={TILESIZE * zoom}
               height={TILESIZE * zoom}
             />
+            {Array.from(userToPosition.entries()).map(([_, pos]) => {
+              return <Sprite
+              image={character2}
+              x={
+                pos[0] * TILESIZE * zoom -
+                viewOffset[0] * TILESIZE * zoom
+              }
+              y={
+                pos[1] * TILESIZE * zoom -
+                viewOffset[1] * TILESIZE * zoom
+              }
+              width={TILESIZE * zoom}
+              height={TILESIZE * zoom}
+            />
+            })}
           </Stage>
         </div>
       </div>

@@ -9,67 +9,74 @@ import (
 type Message struct {
 	Type    string `json:"type"`
 	Topic   string `json:"topic"`
+	UserId  string `json:"userId"`
 	Message string `json:"message"`
 }
 
+type User struct {
+	UserId     string
+	Connection *websocket.Conn
+}
+
 type PubSub struct {
-	mu             sync.RWMutex
-	topicByClient  map[*websocket.Conn]string
-	clientsByTopic map[string]map[*websocket.Conn]bool
+	mu           sync.RWMutex
+	topicByuser  map[User]string
+	usersByTopic map[string]map[User]bool
 }
 
 func NewPubSub() *PubSub {
 	return &PubSub{
-		topicByClient:  make(map[*websocket.Conn]string),
-		clientsByTopic: make(map[string]map[*websocket.Conn]bool),
+		topicByuser:  make(map[User]string),
+		usersByTopic: make(map[string]map[User]bool),
 	}
 }
 
-func (ps *PubSub) Subscribe(topic string, conn *websocket.Conn) {
+func (ps *PubSub) Subscribe(topic string, user User) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	if previousTopic, exists := ps.topicByClient[conn]; exists {
-		delete(ps.clientsByTopic[previousTopic], conn)
-		if len(ps.clientsByTopic[previousTopic]) == 0 {
-			delete(ps.clientsByTopic, previousTopic) // Clean up empty topics
+	if previousTopic, exists := ps.topicByuser[user]; exists {
+		delete(ps.usersByTopic[previousTopic], user)
+		if len(ps.usersByTopic[previousTopic]) == 0 {
+			delete(ps.usersByTopic, previousTopic) // Clean up empty topics
 		}
 	}
 
-	if ps.clientsByTopic[topic] == nil {
-		ps.clientsByTopic[topic] = make(map[*websocket.Conn]bool)
+	if ps.usersByTopic[topic] == nil {
+		ps.usersByTopic[topic] = make(map[User]bool)
 	}
-	ps.clientsByTopic[topic][conn] = true
-	ps.topicByClient[conn] = topic
+	ps.usersByTopic[topic][user] = true
+	ps.topicByuser[user] = topic
 }
 
-func (ps *PubSub) Unsubscribe(topic string, conn *websocket.Conn) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-
-	if _, ok := ps.clientsByTopic[topic]; ok {
-		delete(ps.clientsByTopic[topic], conn)
-		conn.Close()
-		if len(ps.clientsByTopic[topic]) == 0 {
-			delete(ps.clientsByTopic, topic)
-		}
-	}
+func (ps *PubSub) PublishPlayerExit(user User) {
+	ps.Publish(user, PublishPlayerExitMessage{
+		Type:   "playerExit",
+		UserId: user.UserId,
+	})
 }
 
-func (ps *PubSub) Publish(topic, message string) {
+func (ps *PubSub) PublishPosition(user User, message PositionMessage) {
+	ps.Publish(user, PublishPositionMessage{
+		Type:            "position",
+		UserId:          user.UserId,
+		PositionMessage: message,
+	})
+}
+
+func (ps *PubSub) Publish(user User, message interface{}) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
-	if clients, ok := ps.clientsByTopic[topic]; ok {
-		for conn := range clients {
-			err := conn.WriteJSON(Message{
-				Type:    "message",
-				Topic:   topic,
-				Message: message,
-			})
+	topic := ps.topicByuser[user]
+
+	if subscribers, ok := ps.usersByTopic[topic]; ok {
+		for subscriber := range subscribers {
+			conn := subscriber.Connection
+			err := conn.WriteJSON(message)
 			if err != nil {
 				conn.Close()
-				delete(clients, conn)
+				delete(subscribers, subscriber)
 			}
 		}
 	}
