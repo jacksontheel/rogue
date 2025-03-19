@@ -49,6 +49,13 @@ func (ps *PubSub) Subscribe(topic string, user User) {
 	ps.topicByuser[user] = topic
 }
 
+func (ps *PubSub) PublishPlayerEntrance(user User) {
+	ps.Publish(user, PublishPlayerEntranceMessage{
+		Type:   "playerEntrance",
+		UserId: user.UserId,
+	})
+}
+
 func (ps *PubSub) PublishPlayerExit(user User) {
 	ps.Publish(user, PublishPlayerExitMessage{
 		Type:   "playerExit",

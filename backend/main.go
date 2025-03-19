@@ -69,6 +69,7 @@ func handleMessage(ps *pubsub.PubSub, user pubsub.User, rawMsg []byte) {
 		}
 		ps.PublishPlayerExit(user)
 		ps.Subscribe(msg.Topic, user)
+		ps.PublishPlayerEntrance(user)
 	case "position":
 		var msg pubsub.PositionMessage
 		err := json.Unmarshal(baseMsg.Data, &msg)

@@ -21,6 +21,8 @@ const App = () => {
   const [ws, setWs] = useState<WebSocket | undefined>(undefined);
 
   const userIdRef = useRef(userId);
+  const characterPosRef = useRef(characterPos)
+  const wsRef = useRef(ws)
 
   const BASE_URL = "http://localhost:8080/api";
   const CHUNK_URL = `${BASE_URL}/chunk`;
@@ -62,6 +64,11 @@ const App = () => {
             return newMap
           });
           break;
+        case "playerEntrance":
+          if (message.userId !== userIdRef.current) {
+            sendPositionMessage(characterPosRef.current[0], characterPosRef.current[1])
+          }
+          break;
       }
     };
 
@@ -84,11 +91,11 @@ const App = () => {
         case "w":
           if (characterPos[1] == 0) {
             loadWorld(worldPos[0], worldPos[1] - 1);
-            sendPositionMessage(characterPos[0], world.length - 1);
+            sendPositionMessage(characterPosRef.current[0], world.length - 1);
           } else if (
             worldAt(characterPos[0], characterPos[1] - 1) === "STONE_FLOOR"
           ) {
-            sendPositionMessage(characterPos[0], characterPos[1] - 1);
+            sendPositionMessage(characterPosRef.current[0], characterPosRef.current[1] - 1);
           }
           break;
         case "a":
@@ -141,6 +148,14 @@ const App = () => {
   useEffect(() => {
     userIdRef.current = userId;
   }, [userId]);
+
+  useEffect(() => {
+    wsRef.current = ws;
+  }, [ws]);
+
+  useEffect(() => {
+    characterPosRef.current = characterPos;
+  }, [characterPos]);
 
   const loadWorld = (x: number, y: number) => {
     if (ws == null) {
@@ -195,7 +210,7 @@ const App = () => {
   };
 
   const sendPositionMessage = (x: number, y: number) => {
-    ws?.send(
+    wsRef.current?.send(
       JSON.stringify({
         type: "position",
         data: {

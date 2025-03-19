@@ -22,6 +22,11 @@ type PublishPositionMessage struct {
 	PositionMessage PositionMessage `json:"data"`
 }
 
+type PublishPlayerEntranceMessage struct {
+	Type   string `json:"type"`
+	UserId string `json:"userId"`
+}
+
 type PublishPlayerExitMessage struct {
 	Type   string `json:"type"`
 	UserId string `json:"userId"`
